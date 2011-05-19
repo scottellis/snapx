@@ -1,5 +1,7 @@
 /*
- *  V4L2 video capture example
+ *  Yet another V4L2 video capture example
+ *  
+ *  Copyright Scott Ellis, 2011 (C)
  *
  *  This program can be used and distributed without restrictions.
  *
@@ -346,7 +348,7 @@ static int init_image_format(void)
 /* 
    Return 1 if we got a frame and update buff_index
    Return 0 if no frame is ready
-   Return -1 for if an error occurred
+   Return -1 for errors
 */
 static int read_frame(int *buff_index)
 {
