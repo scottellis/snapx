@@ -17,10 +17,12 @@ LIBDIR = $(STAGEDIR)/lib
 
 INCDIR = $(STAGEDIR)/include
 
+LIBS = -pthread
+
 TARGET = snapx
 
 $(TARGET): $(TARGET).c
-	$(CC) $(CFLAGS) -I $(INCDIR) -L $(LIBDIR) $(TARGET).c -o $(TARGET)
+	$(CC) $(CFLAGS) -I $(INCDIR) -L $(LIBDIR) $(LIBS) $(TARGET).c -o $(TARGET)
 
 install:
 	scp $(TARGET) root@tide:/home/root

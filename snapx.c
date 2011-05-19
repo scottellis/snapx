@@ -23,6 +23,7 @@
 #include <asm/types.h>
 #include <signal.h>
 #include <linux/videodev2.h>
+#include <pthread.h>
 
 #define V4L2_MT9P031_GREEN1_GAIN		(V4L2_CID_PRIVATE_BASE + 0)
 #define V4L2_MT9P031_BLUE_GAIN			(V4L2_CID_PRIVATE_BASE + 1)
@@ -48,14 +49,30 @@ int gain[5];
 int fd;
 int exposure_us;
 int pixel_format;
-int image_width = 2560;
-int image_height = 1920;
+int image_width ;
+int image_height;
 int no_snap;
 struct mmap_buffer mm_buff[MAX_MMAP_BUFFERS];
 unsigned int num_buffers;
 int streaming;
 int shutdown_time;
+int buffer_index_to_save;
 
+pthread_mutex_t img_proc_mutex;
+pthread_cond_t	img_proc_cv;
+
+static int msleep(int milliseconds)
+{
+	struct timespec ts;
+
+	if (milliseconds < 1)
+		return -2;
+
+	ts.tv_sec = milliseconds / 1000;
+	ts.tv_nsec = 1000000 * (milliseconds % 1000);
+
+	return nanosleep(&ts, NULL);
+}
 
 static int xioctl(int fd, int request, void *arg)
 {
@@ -376,7 +393,7 @@ static void dump_stats(void)
 
 	total = 0;
 
-	printf("\nImage Stats: ");
+	printf("Stats: buffer_index: %d  ", buffer_index_to_save);
 
 	for (i = 0; i < num_buffers; i++) {
 		printf("buff[%d]: %d  ", i, mm_buff[i].count);
@@ -386,11 +403,44 @@ static void dump_stats(void)
 	printf("Total: %d\n", total);
 }
 
-static void mainloop(void)
+void *thread_proc(void *args)
+{
+	pthread_mutex_lock(&img_proc_mutex);
+
+	while (!shutdown_time) {
+		pthread_cond_wait(&img_proc_cv, &img_proc_mutex);
+
+		if (buffer_index_to_save < 0)
+			break;
+
+		dump_stats();
+
+		// this might need some mutex protection
+		queue_buffer(buffer_index_to_save);
+
+		buffer_index_to_save = -1;
+	}
+
+	pthread_mutex_unlock(&img_proc_mutex);
+	pthread_exit(0);
+}
+
+static void imaging_loop(void)
 {
 	fd_set fds;
 	struct timeval tv;
 	int i, r, buff_index;
+	pthread_t img_proc_thread;
+
+	pthread_mutex_init(&img_proc_mutex, NULL);
+	pthread_cond_init(&img_proc_cv, NULL);
+
+	if (pthread_create(&img_proc_thread, NULL, thread_proc, NULL)) {
+		perror("pthread_create");
+		return;
+	}
+
+	buffer_index_to_save = -1;
 
 	i = 0;
 
@@ -425,18 +475,36 @@ static void mainloop(void)
 		if (r == 0)
 			continue;
 
-		// process the image
-		//write_image(buff_index);
 
-		// requeue the buffer
-		if (queue_buffer(buff_index) < 0)
-			break;
+		if (++i > 100) {
+			if (!pthread_mutex_trylock(&img_proc_mutex)) {
+				if (buffer_index_to_save < 0) {
+					buffer_index_to_save = buff_index;
+					pthread_cond_signal(&img_proc_cv);
+					pthread_mutex_unlock(&img_proc_mutex);					
+				}
+				else {
+					pthread_mutex_unlock(&img_proc_mutex);
+				}
+			}
 
-		i++;
-
-		if (i > 100) {
-			dump_stats();
 			i = 0;
+		}
+		else {
+			// requeue the buffer
+			if (queue_buffer(buff_index) < 0)
+				break;
+		}
+
+
+	}
+
+	if (img_proc_thread) {
+		shutdown_time = 1;
+		if (!pthread_mutex_lock(&img_proc_mutex)) {
+			pthread_cond_signal(&img_proc_cv);
+			pthread_mutex_unlock(&img_proc_mutex);
+			pthread_join(img_proc_thread, NULL);
 		}
 	}
 }
@@ -502,6 +570,8 @@ void get_parameters(int argc, char **argv)
 	size = 0;
 	pixel_format = V4L2_PIX_FMT_UYVY;
 	no_snap = 0;
+	image_width = 2560;
+	image_height = 1920;
 
 	for (;;) {
 		c = getopt_long(argc, argv, short_options, long_options, &index);
@@ -650,7 +720,7 @@ int main(int argc, char **argv)
 	if (stream_on() < 0)
 		goto done;
 
-	mainloop();
+	imaging_loop();
 
 	dump_stats();
 
@@ -661,6 +731,6 @@ done:
 
 	close(fd);
 
-	return 0;
+	pthread_exit(NULL);
 }
 
