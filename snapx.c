@@ -143,6 +143,7 @@ static void set_controls(void)
 static void write_image(unsigned int buff_index)
 {
 	int image_fd;
+	char file[64];
 	int flags = O_CREAT | O_RDWR | O_TRUNC;
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
 
@@ -150,11 +151,14 @@ static void write_image(unsigned int buff_index)
 		return;
 
 	if (pixel_format == V4L2_PIX_FMT_SGRBG10)
-		image_fd = open("bayer.img", flags, mode);
+		sprintf(file, "bayer_%d.img", mm_buff[buff_index].count);
 	else if (pixel_format == V4L2_PIX_FMT_YUYV)
-		image_fd = open("yuyv.img", flags, mode);
+		sprintf(file, "yuyv_%d.img", mm_buff[buff_index].count);
 	else 
-		image_fd = open("uyvy.img", flags, mode);
+		sprintf(file, "uyvy_%d.img", mm_buff[buff_index].count);
+
+
+	image_fd = open(file, flags, mode);
 
 	if (image_fd < 0) {
 		perror("open(<image>)");
@@ -413,9 +417,11 @@ void *thread_proc(void *args)
 		if (buffer_index_to_save < 0)
 			break;
 
+		// fake some work
 		dump_stats();
+		write_image(buffer_index_to_save);
 
-		// this might need some mutex protection
+		// requeue the buffer, this might need some mutex protection
 		queue_buffer(buffer_index_to_save);
 
 		buffer_index_to_save = -1;
@@ -495,8 +501,6 @@ static void imaging_loop(void)
 			if (queue_buffer(buff_index) < 0)
 				break;
 		}
-
-
 	}
 
 	if (img_proc_thread) {
