@@ -237,7 +237,7 @@ static int stream_on(void)
 	return 0;
 }
 
-static void uninit_device(void)
+static void unmap_mmap_buffers(void)
 {
 	int i;
 
@@ -735,7 +735,8 @@ int main(int argc, char **argv)
 done:
 
 	stream_off();
-	uninit_device();
+
+	unmap_mmap_buffers();
 
 	close(fd);
 
