@@ -491,6 +491,10 @@ static void imaging_loop(void)
 				}
 				else {
 					pthread_mutex_unlock(&img_proc_mutex);
+
+					// not going to use this buffer so requeue
+					if (queue_buffer(buff_index) < 0)
+						break;
 				}
 			}
 
