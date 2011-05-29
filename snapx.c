@@ -57,7 +57,7 @@ int no_snap;
 struct mmap_buffer mm_buff[MAX_MMAP_BUFFERS];
 unsigned int num_buffers;
 int streaming;
-int shutdown_time;
+volatile int shutdown_time;
 int buffer_index_to_save;
 
 pthread_mutex_t img_proc_mutex;
@@ -489,7 +489,7 @@ static void imaging_loop(void)
 				if (buffer_index_to_save < 0) {
 					buffer_index_to_save = buff_index;
 					pthread_cond_signal(&img_proc_cv);
-					pthread_mutex_unlock(&img_proc_mutex);					
+					pthread_mutex_unlock(&img_proc_mutex);
 				}
 				else {
 					pthread_mutex_unlock(&img_proc_mutex);
